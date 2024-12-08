@@ -1,0 +1,36 @@
+version: "3.8"
+
+networks:
+  spark-network:
+    driver: bridge
+
+services:
+  spark-master:
+    build:
+      context: .                # Diretório onde está o Dockerfile
+      dockerfile: spark.dockerfile  # Nome do arquivo Dockerfile específico
+    container_name: spark-master
+    hostname: spark-master
+    networks:
+      - spark-network
+    ports:
+      - "7077:7077"  # Porta RPC
+      - "8080:8080"  # Porta WebUI
+    environment:
+      - SPARK_MASTER_HOST=spark-master
+    command: ["/opt/bitnami/spark/bin/spark-class"]
+
+  spark-worker:
+    build:
+      context: .
+      dockerfile: spark.dockerfile
+    container_name: spark-worker
+    hostname: spark-worker
+    networks:
+      - spark-network
+    ports:
+      - "8888:8888"  # Porta RPC Worker
+      - "8081:8081"  # Porta WebUI Worker
+    environment:
+      - SPARK_MASTER_HOST=spark-master
+      - SPARK_WORKER_MEMORY=1g

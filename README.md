@@ -40,6 +40,16 @@ O Spark é uma ferramenta distribuída que depende de uma comunicação eficient
 - **Desafio:** Configurar a comunicação entre os nós enquanto evita problemas de latência ou perda de pacotes.
 - **Dica:** Utilize uma rede bridge personalizada no Docker Compose e atribua nomes amigáveis aos containers para facilitar a configuração.
 
+<p style:"color:#21618c"><strong>Criando uma rede bridge personalizada chamada `spark-network`.</strong></p>
+
+```
+networks:
+  spark-network:
+    driver: bridge
+```
+
+
+
 ### 2. Configuração dos Nós Spark
 
 Os nós do Spark têm funções específicas, e configurar corretamente o `Master` e os `Workers` será essencial para o funcionamento do cluster.
@@ -81,12 +91,6 @@ Monitorar o estado do cluster e os jobs é essencial.
 
 - **Desafio:** Implementar ferramentas para monitorar o Spark, como a interface de usuário nativa do Spark e logs dos containers.
 - **Dica:** Redirecione logs para volumes ou sistemas como Elastic Stack, Prometheus ou Grafana.
-
-## Próximos Passos
-
-1. Definir o arquivo `docker-compose.yml` para orquestrar os containers.
-2. Configurar os arquivos necessários para inicializar o Master e os Workers.
-3. Criar volumes para armazenamento compartilhado.
 
 # Arquitetura Lógica vs Arquitetura Física
 

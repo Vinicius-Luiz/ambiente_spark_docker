@@ -1,0 +1,26 @@
+version: '3'
+services:
+  spark-master:
+    image: bitnami/spark:latest
+    container_name: spark-master
+    hostname: spark-master
+    networks:
+      - spark-network
+    ports:
+      - "7077:7077"  # Porta RPC
+      - "8080:8080"  # Porta WebUI
+    command: ["/opt/bitnami/spark/bin/spark-class", "org.apache.spark.deploy.master.Master", "--host", "spark-master", "--port", "7077", "--webui-port", "8080"]
+
+  spark-worker:
+    image: bitnami/spark:latest
+    container_name: spark-worker
+    hostname: spark-worker
+    networks:
+      - spark-network
+    depends_on:
+      - spark-master  # O worker depende do master estar rodando
+    command: ["/opt/bitnami/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+
+networks:
+  spark-network:
+    driver: bridge
