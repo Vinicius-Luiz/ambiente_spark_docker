@@ -1,3 +1,5 @@
+
+
 # Ambiente Apache Spark com Docker
 
 Configurando um ambiente Apache Spark utilizando Docker, ideal para desenvolvimento, testes e aprendizado. Ele consiste em múltiplos containers para simular um cluster funcional.
@@ -40,7 +42,9 @@ O Spark é uma ferramenta distribuída que depende de uma comunicação eficient
 - **Desafio:** Configurar a comunicação entre os nós enquanto evita problemas de latência ou perda de pacotes.
 - **Dica:** Utilize uma rede bridge personalizada no Docker Compose e atribua nomes amigáveis aos containers para facilitar a configuração.
 
-<p style:"color:#21618c"><strong>Criando uma rede bridge personalizada chamada `spark-network`.</strong></p>
+<p style="color: #21618c"><strong>DOCUMENTAÇÃO</strong></p>
+
+Criando uma rede bridge personalizada chamada `spark-network`
 
 ```
 networks:
@@ -48,14 +52,123 @@ networks:
     driver: bridge
 ```
 
-
-
 ### 2. Configuração dos Nós Spark
 
 Os nós do Spark têm funções específicas, e configurar corretamente o `Master` e os `Workers` será essencial para o funcionamento do cluster.
 
 - **Desafio:** Configurar corretamente as variáveis de ambiente (ex.: `SPARK_MASTER_HOST`, `SPARK_WORKER_MEMORY`) para que os workers se conectem ao master.
 - **Dica:** Use arquivos de configuração (como `spark-env.sh` e `spark-defaults.conf`) nos seus Dockerfiles para manter as configurações organizadas.
+
+<p style="color: #21618c"><strong>DOCUMENTAÇÃO</strong></p>
+
+Nesta etapa, foram criados e configurados três arquivos principais para garantir que o Apache Spark funcione de maneira eficiente no ambiente distribuído: **`spark-env.sh`**, **`spark-defaults.conf`**, e **`docker-compose.yml`**.
+
+1. **spark-env.sh**
+
+O arquivo **`spark-env.sh`** é responsável pela configuração de variáveis de ambiente que são usadas pelo Apache Spark durante a execução.
+
+```bash
+# Variáveis de ambiente comuns (master e worker)
+SPARK_HOME=/opt/bitnami/spark        # Diretório raiz da instalação do Apache Spark
+JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64  # Caminho do JDK necessário para o Spark
+HADOOP_CONF_DIR=/opt/hadoop/conf     # Diretório de configuração do Hadoop (usado se integrar com HDFS)
+SPARK_CONF_DIR=/opt/spark/conf       # Diretório onde as configurações do Spark estão armazenadas
+
+# Configuração específica para o Master
+SPARK_MASTER_HOST=spark-master       # Nome do host do nó Master no cluster Spark
+SPARK_MASTER_PORT=7077               # Porta onde o Master recebe conexões RPC
+SPARK_MASTER_WEBUI_PORT=8080         # Porta para acessar a interface Web do Master
+
+# Configuração específica para os Workers
+SPARK_WORKER_CORES=2                 # Número de núcleos alocados por cada nó Worker
+SPARK_WORKER_MEMORY=1g               # Memória total disponível para cada Worker (2 GB)
+SPARK_WORKER_PORT=8888               # Porta onde o Worker recebe conexões RPC
+SPARK_WORKER_WEBUI_PORT=8081         # Porta para acessar a interface Web de cada Worker
+
+LD_PRELOAD=/opt/bitnami/common/lib/libnss_wrapper.so
+```
+
+
+
+2. **spark-defaults.conf**
+
+O arquivo **`spark-defaults.conf`** contém as configurações padrão do Apache Spark, como parâmetros de configuração relacionados à performance, a integração com outros sistemas (como Hadoop), e opções de configuração para a execução de jobs.
+
+```bash
+# Configuração de logs
+## Ativa o registro de eventos do Spark para monitorar jobs
+spark.eventLog.enabled true
+
+## Diretório onde os eventos do Spark serão armazenados
+spark.eventLog.dir file:/tmp/spark-events
+
+# Configuração do Master
+## Define o endereço do Master no cluster, incluindo o protocolo (spark://)
+spark.master spark://spark-master:7077
+
+# Configuração de jobs
+## Quantidade de memória alocada para o driver (512 MB neste caso)
+spark.driver.memory 512m
+
+## Quantidade de memória alocada para cada executor no cluster (512 MB neste caso)
+spark.executor.memory 512m
+
+## Número de núcleos de CPU alocados para cada executor
+spark.executor.cores 2
+```
+
+
+
+1. **docker-compose.yml**
+
+O arquivo **`docker-compose.yml`** é responsável por definir e configurar os serviços (containers) necessários para a execução do Apache Spark em um ambiente Dockerizado. Ele define os serviços principais do cluster, como o Spark Master e os Spark Workers, além de suas dependências e redes.
+
+```yaml
+version: '3'  # Versão do Docker Compose
+
+services:  # Definindo os serviços (containers) que serão utilizados
+
+  spark-master:  # Serviço do Master
+    image: bitnami/spark:latest  # Imagem Docker do Apache Spark
+    container_name: spark-master  # Nome do container
+    hostname: spark-master  # Nome do host do container
+    networks:
+      - spark-network  # Conectando o container à rede 'spark-network'
+    ports:
+      - "7077:7077"  # Porta RPC (usada para comunicação com os Workers)
+      - "8080:8080"  # Porta WebUI (interface de monitoramento do Master)
+    command: ["/opt/bitnami/spark/bin/spark-class", "org.apache.spark.deploy.master.Master", "--host", "spark-master", "--port", "7077", "--webui-port", "8080"]
+    # Comando para iniciar o Master do Spark, definindo o host, porta RPC e a porta da WebUI
+
+  spark-worker-1:  # Serviço do primeiro Worker
+    image: bitnami/spark:latest  # Imagem Docker do Apache Spark
+    container_name: spark-worker-1  # Nome do container
+    hostname: spark-worker-1  # Nome do host do container
+    networks:
+      - spark-network  # Conectando o container à rede 'spark-network'
+    depends_on:
+      - spark-master  # O worker depende que o master esteja rodando
+    command: ["/opt/bitnami/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+    # Comando para iniciar o Worker do Spark e conectar ao master via RPC (porta 7077)
+
+  spark-worker-2:  # Serviço do segundo Worker
+    image: bitnami/spark:latest  # Imagem Docker do Apache Spark
+    container_name: spark-worker-2  # Nome do container
+    hostname: spark-worker-2  # Nome do host do container
+    networks:
+      - spark-network  # Conectando o container à rede 'spark-network'
+    depends_on:
+      - spark-master  # O worker depende que o master esteja rodando
+    command: ["/opt/bitnami/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+    # Comando para iniciar o Worker do Spark e conectar ao master via RPC (porta 7077)
+
+networks:  # Definindo a rede que os containers irão usar
+  spark-network:  # Rede personalizada para os containers
+    driver: bridge  # Usando o driver de rede 'bridge' para comunicação entre containers
+
+```
+
+
 
 ### 3. Gerenciamento de Volume e Armazenamento Compartilhado
 
