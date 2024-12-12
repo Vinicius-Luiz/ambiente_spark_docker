@@ -11,6 +11,8 @@ services:  # Definindo os serviços (containers) que serão utilizados
     ports:
       - "7077:7077"  # Porta RPC (usada para comunicação com os Workers)
       - "8080:8080"  # Porta WebUI (interface de monitoramento do Master)
+    volumes:
+      - spark-volume:/opt/bitnami/spark/conf  # Monta o volume no diretório de configuração do Spark
     command: ["/opt/bitnami/spark/bin/spark-class", "org.apache.spark.deploy.master.Master", "--host", "spark-master", "--port", "7077", "--webui-port", "8080"]
     # Comando para iniciar o Master do Spark, definindo o host, porta RPC e a porta da WebUI
 
@@ -22,6 +24,8 @@ services:  # Definindo os serviços (containers) que serão utilizados
       - spark-network  # Conectando o container à rede 'spark-network'
     depends_on:
       - spark-master  # O worker depende que o master esteja rodando
+    volumes:
+      - spark-volume:/opt/bitnami/spark/conf  # Monta o mesmo volume no worker
     command: ["/opt/bitnami/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
     # Comando para iniciar o Worker do Spark e conectar ao master via RPC (porta 7077)
 
@@ -33,9 +37,15 @@ services:  # Definindo os serviços (containers) que serão utilizados
       - spark-network  # Conectando o container à rede 'spark-network'
     depends_on:
       - spark-master  # O worker depende que o master esteja rodando
+    volumes:
+      - spark-volume:/opt/bitnami/spark/conf  # Monta o mesmo volume no worker
     command: ["/opt/bitnami/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
     # Comando para iniciar o Worker do Spark e conectar ao master via RPC (porta 7077)
 
 networks:  # Definindo a rede que os containers irão usar
-  spark-network:  # Rede personalizada para os containers
+  spark-network:
     driver: bridge  # Usando o driver de rede 'bridge' para comunicação entre containers
+
+volumes:  # Definindo o volume compartilhado que os containers irão usar
+  spark-volume:
+    driver: local  # Indica que o volume é gerenciado localmente pela máquina hospedeira.

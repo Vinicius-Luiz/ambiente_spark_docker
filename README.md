@@ -43,10 +43,11 @@ O Spark é uma ferramenta distribuída que depende de uma comunicação eficient
 - **Dica:** Utilize uma rede bridge personalizada no Docker Compose e atribua nomes amigáveis aos containers para facilitar a configuração.
 
 <p style="color: #21618c"><strong>DOCUMENTAÇÃO</strong></p>
+O Spark é uma ferramenta distribuída que depende de uma comunicação entre os nós (master, workers e client). No Docker, é necessário configurar redes personalizadas.para garantir que os containers possam se comunicar corretamente.
+<br><br>
+Criando uma rede bridge personalizada chamada `spark-network`. A rede bridge Funciona como uma sub-rede privada interna, isolando containers, mas permitindo que se comuniquem entre si. Essa rede é a mais comum para containers em ambientes isolados.
 
-Criando uma rede bridge personalizada chamada `spark-network`
-
-```
+```yml
 networks:
   spark-network:
     driver: bridge
@@ -63,7 +64,7 @@ Os nós do Spark têm funções específicas, e configurar corretamente o `Maste
 
 Nesta etapa, foram criados e configurados três arquivos principais para garantir que o Apache Spark funcione de maneira eficiente no ambiente distribuído: **`spark-env.sh`**, **`spark-defaults.conf`**, e **`docker-compose.yml`**.
 
-1. **spark-env.sh**
+#### spark-env.sh
 
 O arquivo **`spark-env.sh`** é responsável pela configuração de variáveis de ambiente que são usadas pelo Apache Spark durante a execução.
 
@@ -88,9 +89,7 @@ SPARK_WORKER_WEBUI_PORT=8081         # Porta para acessar a interface Web de cad
 LD_PRELOAD=/opt/bitnami/common/lib/libnss_wrapper.so
 ```
 
-
-
-2. **spark-defaults.conf**
+#### spark-defaults.conf
 
 O arquivo **`spark-defaults.conf`** contém as configurações padrão do Apache Spark, como parâmetros de configuração relacionados à performance, a integração com outros sistemas (como Hadoop), e opções de configuração para a execução de jobs.
 
@@ -117,13 +116,11 @@ spark.executor.memory 512m
 spark.executor.cores 2
 ```
 
-
-
-1. **docker-compose.yml**
+#### docker-compose.yml
 
 O arquivo **`docker-compose.yml`** é responsável por definir e configurar os serviços (containers) necessários para a execução do Apache Spark em um ambiente Dockerizado. Ele define os serviços principais do cluster, como o Spark Master e os Spark Workers, além de suas dependências e redes.
 
-```yaml
+```yml
 version: '3'  # Versão do Docker Compose
 
 services:  # Definindo os serviços (containers) que serão utilizados
@@ -165,10 +162,23 @@ services:  # Definindo os serviços (containers) que serão utilizados
 networks:  # Definindo a rede que os containers irão usar
   spark-network:  # Rede personalizada para os containers
     driver: bridge  # Usando o driver de rede 'bridge' para comunicação entre containers
-
 ```
 
+Ao iniciar os serviços via Docker Compose utilizando `docker-compose up`, A UI do Spark Master é iniciado corretamente.
+<img src="_images/200.png"></img>
+**Workers Ativos**<br>
+- Há 2 Workers registrados, ambos no estado ALIVE.
+- Cada Worker possui 12 núcleos (Cores) disponíveis, totalizando 24 núcleos no cluster.
+- A memória alocada para cada Worker é de 6.4 GiB, somando 12.9 GiB no cluster.
 
+**Aplicações e Drivers**<br>
+
+- Não há aplicações em execução no momento (Running Applications: 0).
+- Não há drivers conectados ao Master no momento.
+
+Status Geral: O Master e os Workers estão corretamente configurados, prontos para executar tarefas distribuídas no cluster.
+
+**REPARE QUE AS CONFIGURAÇÕES DE MEMÓRIA ALOCADAS NÃO FORAM APLICADAS PORQUE NÃO CONFIGURAMOS OS VOLUMES PARA RECEBER NOSSAS CONFIGURAÇÕES DO `spark-env.sh`. FAREMOS NA PRÓXIMA ETAPA.**
 
 ### 3. Gerenciamento de Volume e Armazenamento Compartilhado
 
@@ -176,6 +186,36 @@ O Spark frequentemente usa armazenamento compartilhado para logs, checkpoints ou
 
 - **Desafio:** Garantir que todos os nós possam acessar um sistema de arquivos compartilhado para sincronizar dados.
 - **Dica:** Utilize volumes Docker para criar armazenamento persistente ou até mesmo serviços externos, como o HDFS (Hadoop Distributed File System), para armazenamento escalável.
+
+<p style="color: #21618c"><strong>DOCUMENTAÇÃO</strong></p>
+Foi implementado o conceito de volumes Docker para gerenciar e compartilhar os arquivos de configuração entre os containers.
+
+#### Definição do volume
+
+O volume foi definido na seção volumes do arquivo `docker-compose.yml`, com o nome spark-volume.
+
+```yml
+volumes:  # Definindo o volume compartilhado que os containers irão usar
+  spark-volume:
+    driver: local  # Define um volume local
+```
+
+#### Montagem do Volume nos Containers
+
+O volume spark-volume foi anexado a três containers no arquivo docker-compose.yml: spark-master, spark-worker-1 e spark-worker-2. Isso foi configurado para que todos compartilhem o diretório /opt/bitnami/spark/conf.
+```yml
+# Exemplo de configuração do volume em cada container
+volumes:
+  - spark-volume:/opt/bitnami/spark/conf
+```
+
+#### Transferência de Arquivos de Configuração para o Volume
+Os arquivos de configuração do Spark foram movidos para o volume spark-volume para que os containers utilizem configurações centralizadas.
+```bash
+sudo su
+sudo cp "/mnt/c/Users/Vinicius Luiz/Desktop/Ambiente-Spark-Docker/spark-env.sh" /var/lib/docker/volumes/ambiente-spark-docker_spark-volume/_data
+sudo chmod 644 /var/lib/docker/volumes/ambiente-spark-docker_spark-volume/_data/spark-env.sh
+```
 
 ### 4. Distribuição de Carga entre Workers
 
