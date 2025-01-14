@@ -33,16 +33,10 @@ O ambiente Spark é composto pelos seguintes containers:
 - Docker instalado no sistema.
 - Docker Compose para orquestração dos containers.
 
-## Desafios
+## Desenvolvimento
 
 ### 1. Configuração de rede
 
-O Spark é uma ferramenta distribuída que depende de uma comunicação eficiente entre os nós (master, workers e client). No Docker, você precisará configurar redes personalizadas para garantir que os containers possam se comunicar corretamente.
-
-- **Desafio:** Configurar a comunicação entre os nós enquanto evita problemas de latência ou perda de pacotes.
-- **Dica:** Utilize uma rede bridge personalizada no Docker Compose e atribua nomes amigáveis aos containers para facilitar a configuração.
-
-<p style="color: #21618c"><strong>DOCUMENTAÇÃO</strong></p>
 O Spark é uma ferramenta distribuída que depende de uma comunicação entre os nós (master, workers e client). No Docker, é necessário configurar redes personalizadas.para garantir que os containers possam se comunicar corretamente.
 <br><br>
 Criando uma rede bridge personalizada chamada `spark-network`. A rede bridge Funciona como uma sub-rede privada interna, isolando containers, mas permitindo que se comuniquem entre si. Essa rede é a mais comum para containers em ambientes isolados.
@@ -54,13 +48,6 @@ networks:
 ```
 
 ### 2. Configuração dos Nós Spark
-
-Os nós do Spark têm funções específicas, e configurar corretamente o `Master` e os `Workers` será essencial para o funcionamento do cluster.
-
-- **Desafio:** Configurar corretamente as variáveis de ambiente (ex.: `SPARK_MASTER_HOST`, `SPARK_WORKER_MEMORY`) para que os workers se conectem ao master.
-- **Dica:** Use arquivos de configuração (como `spark-env.sh` e `spark-defaults.conf`) nos seus Dockerfiles para manter as configurações organizadas.
-
-<p style="color: #21618c"><strong>DOCUMENTAÇÃO</strong></p>
 
 Nesta etapa, foram criados e configurados três arquivos principais para garantir que o Apache Spark funcione de maneira eficiente no ambiente distribuído: **`spark-env.sh`**, **`spark-defaults.conf`**, e **`docker-compose.yml`**.
 
@@ -85,8 +72,6 @@ SPARK_WORKER_CORES=2                 # Número de núcleos alocados por cada nó
 SPARK_WORKER_MEMORY=1g               # Memória total disponível para cada Worker (2 GB)
 SPARK_WORKER_PORT=8888               # Porta onde o Worker recebe conexões RPC
 SPARK_WORKER_WEBUI_PORT=8081         # Porta para acessar a interface Web de cada Worker
-
-LD_PRELOAD=/opt/bitnami/common/lib/libnss_wrapper.so
 ```
 
 #### spark-defaults.conf
@@ -182,12 +167,6 @@ Status Geral: O Master e os Workers estão corretamente configurados, prontos pa
 
 ### 3. Gerenciamento de Volume e Armazenamento Compartilhado
 
-O Spark frequentemente usa armazenamento compartilhado para logs, checkpoints ou cache. Implementar isso com volumes Docker requer atenção.
-
-- **Desafio:** Garantir que todos os nós possam acessar um sistema de arquivos compartilhado para sincronizar dados.
-- **Dica:** Utilize volumes Docker para criar armazenamento persistente ou até mesmo serviços externos, como o HDFS (Hadoop Distributed File System), para armazenamento escalável.
-
-<p style="color: #21618c"><strong>DOCUMENTAÇÃO</strong></p>
 Foi implementado o conceito de volumes Docker para gerenciar e compartilhar os arquivos de configuração entre os containers.
 
 #### Definição do volume
@@ -209,6 +188,8 @@ volumes:
   - spark-volume:/opt/bitnami/spark/conf
 ```
 
+### 4. Distribuição de Carga entre Workers
+
 #### Transferência de Arquivos de Configuração para o Volume
 Os arquivos de configuração do Spark foram movidos para o volume spark-volume para que os containers utilizem configurações centralizadas.
 ```bash
@@ -217,19 +198,34 @@ sudo cp "/mnt/c/Users/Vinicius Luiz/Desktop/Ambiente-Spark-Docker/spark-env.sh" 
 sudo chmod 644 /var/lib/docker/volumes/ambiente-spark-docker_spark-volume/_data/spark-env.sh
 ```
 
-### 4. Distribuição de Carga entre Workers
+Após aplicar as configurações do nosso `spark-env.sh`. Obtivemos as seguintes mudanças de configuração.
+<img src="_images/300.png"></img>
 
-Equilibrar o trabalho entre os workers de maneira eficiente é essencial para aproveitar os benefícios do Spark.
-
-- **Desafio:** Configurar os workers com recursos apropriados (CPU, memória) e garantir que eles estejam alinhados com as necessidades do Spark.
-- **Dica:** Planeje a quantidade de CPU e memória que cada container pode usar com as opções `--cpus` e `--memory`.
+| **Parâmetro**          | **Antes**                | **Agora**               |
+|------------------------|--------------------------|-------------------------|
+| **Cores in Use**       | 24 (12 por worker)       | 4 (2 por worker)        |
+| **Memory in Use**      | 12.9 GiB (6.4 GiB/worker)| 2.0 GiB (1.0 GiB/worker)|
 
 ### 5. Integração com um Ambiente de Client
 
-O nó cliente será responsável por enviar jobs ao cluster Spark.
+#### Por que ter um Client é importante?
+O client é responsável para a interação com o cluster e para o desenvolvimento ágil. Ele centraliza funções de configuração, envio e monitoramento de jobs. Sem ele, o cluster Spark seria apenas um ambiente passivo, aguardando comandos externos sem oferecer suporte completo ao ciclo de desenvolvimento.
 
-- **Desafio:** Configurar corretamente o ambiente do nó cliente para que ele localize o Master e interaja com o cluster.
-- **Dica:** Certifique-se de que o cliente tenha as bibliotecas e as configurações adequadas para executar jobs Spark.
+```yml
+  spark-client:  # Novo serviço do Client
+    image: bitnami/spark:latest  # Imagem Docker do Apache Spark
+    container_name: spark-client  # Nome do container
+    hostname: spark-client  # Nome do host do container
+    networks:
+      - spark-network  # Conectando o container à rede 'spark-network'
+    depends_on:
+      - spark-master  # O client depende que o master esteja rodando
+    volumes:
+      - spark-volume:/opt/bitnami/spark/conf  # Monta o mesmo volume compartilhado
+    entrypoint: ["/bin/bash"]  # Inicia o container em modo interativo
+    # O client será acessado manualmente para submeter jobs
+```
+
 
 ### 6. Resiliência e Escalabilidade
 

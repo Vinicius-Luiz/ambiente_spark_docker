@@ -42,6 +42,31 @@ services:  # Definindo os serviços (containers) que serão utilizados
     command: ["/opt/bitnami/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
     # Comando para iniciar o Worker do Spark e conectar ao master via RPC (porta 7077)
 
+  spark-client:  # Novo serviço do Client
+    image: bitnami/spark:latest  # Imagem Docker do Apache Spark
+    container_name: spark-client  # Nome do container
+    hostname: spark-client  # Nome do host do container
+    networks:
+      - spark-network  # Conectando o container à rede 'spark-network'
+    depends_on:
+      # O client depende que o master esteja rodando
+      - spark-master
+      # Os workers devem estar rodando também
+      - spark-worker-1
+      - spark-worker-2
+    volumes:
+      - spark-volume:/opt/bitnami/spark/conf  # Monta o mesmo volume compartilhado
+      - ./scripts-py:/opt/bitnami/spark/conf/scripts-py  # Monta os scripts Python no container
+    environment:
+      - SPARK_DRIVER_EXTRA_OPTS=-Divy.cache.dir=/tmp -Divy.home=/tmp  # Configurações adicionais do Spark
+    entrypoint: >
+      bash -c "
+        mkdir -p /opt/bitnami/spark/tmp &&
+        touch /opt/bitnami/spark/tmp/nss_passwd &&
+        pip install findspark &&
+        tail -f /dev/null"
+    # O client será acessado manualmente para submeter jobs
+
 networks:  # Definindo a rede que os containers irão usar
   spark-network:
     driver: bridge  # Usando o driver de rede 'bridge' para comunicação entre containers
