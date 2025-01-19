@@ -1,76 +1,85 @@
-version: '3'  # Versão do Docker Compose
+version: '3'
 
-services:  # Definindo os serviços (containers) que serão utilizados
+services: # Definição dos serviços do cluster Spark
 
-  spark-master:  # Serviço do Master
-    image: bitnami/spark:latest  # Imagem Docker do Apache Spark
-    container_name: spark-master  # Nome do container
-    hostname: spark-master  # Nome do host do container
+  spark-master: # Serviço do Master do Spark
+    image: bitnami/spark:3.5.2 # Imagem Docker do Apache Spark com a versão especificada
+    container_name: spark-master # Nome do container
+    hostname: spark-master # Nome do host dentro da rede Docker
     networks:
-      - spark-network  # Conectando o container à rede 'spark-network'
+      - spark-network # Conecta o serviço à rede personalizada 'spark-network'
     ports:
-      - "7077:7077"  # Porta RPC (usada para comunicação com os Workers)
-      - "8080:8080"  # Porta WebUI (interface de monitoramento do Master)
+      - "7077:7077" # Porta para comunicação com o Spark Master
+      - "8080:8080" # Porta para a interface web do Spark Master
     volumes:
-      - spark-volume:/opt/bitnami/spark/conf  # Monta o volume no diretório de configuração do Spark
-    command: ["/opt/bitnami/spark/bin/spark-class", "org.apache.spark.deploy.master.Master", "--host", "spark-master", "--port", "7077", "--webui-port", "8080"]
-    # Comando para iniciar o Master do Spark, definindo o host, porta RPC e a porta da WebUI
+      - spark-volume:/opt/bitnami/spark/conf # Volume compartilhado para persistir configurações do Spark
+    command: # Comando para inicializar o Spark Master
+      - "/opt/bitnami/spark/bin/spark-class"
+      - "org.apache.spark.deploy.master.Master"
+      - "--host"
+      - "spark-master"
+      - "--port"
+      - "7077"
+      - "--webui-port"
+      - "8080"
 
-  spark-worker-1:  # Serviço do primeiro Worker
-    image: bitnami/spark:latest  # Imagem Docker do Apache Spark
-    container_name: spark-worker-1  # Nome do container
-    hostname: spark-worker-1  # Nome do host do container
+  spark-worker-1: # Primeiro Spark Worker
+    image: bitnami/spark:3.5.2
+    container_name: spark-worker-1
+    hostname: spark-worker-1
     networks:
-      - spark-network  # Conectando o container à rede 'spark-network'
+      - spark-network
     depends_on:
-      - spark-master  # O worker depende que o master esteja rodando
+      - spark-master # Garante que o Master estará disponível antes de iniciar este serviço
     volumes:
-      - spark-volume:/opt/bitnami/spark/conf  # Monta o mesmo volume no worker
-    command: ["/opt/bitnami/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
-    # Comando para iniciar o Worker do Spark e conectar ao master via RPC (porta 7077)
+      - spark-volume:/opt/bitnami/spark/conf
+    command: # Comando para conectar o worker ao Master
+      - "/opt/bitnami/spark/bin/spark-class"
+      - "org.apache.spark.deploy.worker.Worker"
+      - "spark://spark-master:7077" # Endereço do Master
 
-  spark-worker-2:  # Serviço do segundo Worker
-    image: bitnami/spark:latest  # Imagem Docker do Apache Spark
-    container_name: spark-worker-2  # Nome do container
-    hostname: spark-worker-2  # Nome do host do container
+  spark-worker-2: # Segundo Spark Worker (estrutura similar ao primeiro)
+    image: bitnami/spark:3.5.2
+    container_name: spark-worker-2
+    hostname: spark-worker-2
     networks:
-      - spark-network  # Conectando o container à rede 'spark-network'
+      - spark-network
     depends_on:
-      - spark-master  # O worker depende que o master esteja rodando
-    volumes:
-      - spark-volume:/opt/bitnami/spark/conf  # Monta o mesmo volume no worker
-    command: ["/opt/bitnami/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
-    # Comando para iniciar o Worker do Spark e conectar ao master via RPC (porta 7077)
-
-  spark-client:  # Novo serviço do Client
-    image: bitnami/spark:latest  # Imagem Docker do Apache Spark
-    container_name: spark-client  # Nome do container
-    hostname: spark-client  # Nome do host do container
-    networks:
-      - spark-network  # Conectando o container à rede 'spark-network'
-    depends_on:
-      # O client depende que o master esteja rodando
       - spark-master
-      # Os workers devem estar rodando também
-      - spark-worker-1
-      - spark-worker-2
     volumes:
-      - spark-volume:/opt/bitnami/spark/conf  # Monta o mesmo volume compartilhado
-      - ./scripts-py:/opt/bitnami/spark/conf/scripts-py  # Monta os scripts Python no container
-    environment:
-      - SPARK_DRIVER_EXTRA_OPTS=-Divy.cache.dir=/tmp -Divy.home=/tmp  # Configurações adicionais do Spark
-    entrypoint: >
+      - spark-volume:/opt/bitnami/spark/conf
+    command:
+      - "/opt/bitnami/spark/bin/spark-class"
+      - "org.apache.spark.deploy.worker.Worker"
+      - "spark://spark-master:7077"
+
+  spark-client: # Cliente do Spark para submissão de jobs
+    image: bitnami/spark:3.5.2
+    container_name: spark-client
+    hostname: spark-client
+    networks:
+      - spark-network
+    depends_on:
+      - spark-master # Garante que o Master estará disponível
+      - spark-worker-1 # Garante que o primeiro Worker estará disponível
+      - spark-worker-2 # Garante que o segundo Worker estará disponível
+    volumes:
+      - spark-volume:/opt/bitnami/spark/conf # Volume compartilhado para configurações
+      - ./scripts-py:/opt/bitnami/spark/conf/scripts-py # Monta o diretório local 'scripts-py' para armazenar scripts Python
+      - ./outputs:/opt/bitnami/spark/conf/output # Monta o diretório local 'outputs' para salvar resultados
+    environment: # Variáveis de ambiente adicionais para o cliente
+      - SPARK_DRIVER_EXTRA_OPTS=-Divy.cache.dir=/tmp -Divy.home=/tmp # Configurações para cache Maven
+    entrypoint: > # Comando inicial do container
       bash -c "
         mkdir -p /opt/bitnami/spark/tmp &&
         touch /opt/bitnami/spark/tmp/nss_passwd &&
         pip install findspark &&
         tail -f /dev/null"
-    # O client será acessado manualmente para submeter jobs
 
-networks:  # Definindo a rede que os containers irão usar
-  spark-network:
-    driver: bridge  # Usando o driver de rede 'bridge' para comunicação entre containers
+networks: # Configurações da rede Docker
+  spark-network: # Rede personalizada para o cluster Spark
+    driver: bridge # Tipo de rede (bridge)
 
-volumes:  # Definindo o volume compartilhado que os containers irão usar
-  spark-volume:
-    driver: local  # Indica que o volume é gerenciado localmente pela máquina hospedeira.
+volumes: # Configurações de volumes para persistência de dados
+  spark-volume: # Volume compartilhado entre Master, Workers e Client
+    driver: local # Tipo de volume (local)
